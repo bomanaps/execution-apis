@@ -17,42 +17,74 @@ function sortByMethodName(methods) {
 
 console.log("Loading files...\n");
 
-let methods = [];
+// Load methods by namespace instead of combining them
+let ethMethods = [];
+let debugMethods = [];
+let engineMethods = [];
+
+// Load eth methods
 let methodsBase = "src/eth/";
 let methodFiles = fs.readdirSync(methodsBase);
 methodFiles.forEach(file => {
   console.log(file);
   let raw = fs.readFileSync(methodsBase + file);
   let parsed = yaml.load(raw);
-  methods = [
-    ...methods,
+  ethMethods = [
+    ...ethMethods,
     ...parsed,
   ];
 });
 
+// Load debug methods
 methodsBase = "src/debug/";
 methodFiles = fs.readdirSync(methodsBase);
 methodFiles.forEach(file => {
   console.log(file);
   let raw = fs.readFileSync(methodsBase + file);
   let parsed = yaml.load(raw);
-  methods = [
-    ...methods,
+  debugMethods = [
+    ...debugMethods,
     ...parsed,
   ];
 });
 
+// Load engine methods
 methodsBase = "src/engine/openrpc/methods/";
 methodFiles = fs.readdirSync(methodsBase);
 methodFiles.forEach(file => {
   console.log(file);
   let raw = fs.readFileSync(methodsBase + file);
   let parsed = yaml.load(raw);
-  methods = [
-    ...methods,
+  engineMethods = [
+    ...engineMethods,
     ...parsed,
   ];
 });
+
+// Sort each namespace's methods
+ethMethods = sortByMethodName(ethMethods);
+debugMethods = sortByMethodName(debugMethods);
+engineMethods = sortByMethodName(engineMethods);
+
+// Combine all methods for the final document
+// We'll add tags to each method to identify its namespace
+ethMethods = ethMethods.map(method => ({
+  ...method,
+  tags: [{ name: "eth", description: "Ethereum JSON-RPC API" }]
+}));
+
+debugMethods = debugMethods.map(method => ({
+  ...method,
+  tags: [{ name: "debug", description: "Debug API" }]
+}));
+
+engineMethods = engineMethods.map(method => ({
+  ...method,
+  tags: [{ name: "engine", description: "Engine API" }]
+}));
+
+// Combine all methods
+let methods = [...ethMethods, ...debugMethods, ...engineMethods];
 
 let schemas = {};
 let schemasBase = "src/schemas/"
@@ -90,7 +122,7 @@ const doc = {
     },
     version: "0.0.0"
   },
-  methods: sortByMethodName(methods),
+  methods: methods,
   components: {
     schemas: schemas
   }
