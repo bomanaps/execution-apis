@@ -1,7 +1,7 @@
 **/node_modules
+docs-api/api
 **/.cache
 build/
-docs-api/
 openrpc.json
 refs-openrpc.json
 data.json
