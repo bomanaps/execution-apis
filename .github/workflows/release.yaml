@@ -50,17 +50,36 @@ jobs:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: npm run spec:set-version -- --version "$TAG"
 
+      - name: Snapshot this release as a docusaurus version
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          VER="${TAG#v}"
+          npm run docs:copy
+          # Re-runs (workflow_dispatch on an existing tag) may have a stale
+          # version dir from a prior run; docusaurus refuses to overwrite.
+          rm -rf "api_versioned_docs/version-${VER}" \
+                 "api_versioned_sidebars/version-${VER}-sidebars.json"
+          npx docusaurus docs:version:api "$VER"
+
+      - name: Assemble versioned docs (past releases + pending)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: node scripts/assemble-versions.js --pending "$TAG"
+
       - name: Build docs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run build:docs:ci
 
-      - name: Snapshot versioned docs
+      - name: Tar versioned snapshot for release asset
         env:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
+          set -euo pipefail
           VER="${TAG#v}"
-          npx docusaurus docs:version:api "$VER"
           tar -czf "docs-snapshot-${TAG}.tar.gz" \
             "api_versioned_docs/version-${VER}" \
             "api_versioned_sidebars/version-${VER}-sidebars.json"
