@@ -109,14 +109,36 @@ jobs:
         with:
           name: docs-snapshot
 
-      - name: Create draft GitHub Release
+      - name: Verify required assets exist on disk
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          for f in openrpc.json refs-openrpc.json "docs-snapshot-${TAG}.tar.gz"; do
+            if [ ! -s "$f" ]; then
+              echo "::error::missing or empty release asset: $f"
+              exit 1
+            fi
+          done
+
+      - name: Create or update GitHub Release (published, with assets)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "$TAG" \
-            --draft \
-            --generate-notes \
-            openrpc.json refs-openrpc.json "docs-snapshot-${TAG}.tar.gz"
+          set -euo pipefail
+          ASSETS=(openrpc.json refs-openrpc.json "docs-snapshot-${TAG}.tar.gz")
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release $TAG exists; uploading assets with --clobber and ensuring it is published"
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "${ASSETS[@]}"
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
+          else
+            echo "creating new published release $TAG"
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" \
+              --verify-tag \
+              --generate-notes \
+              --latest \
+              "${ASSETS[@]}"
+          fi
