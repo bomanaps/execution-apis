@@ -121,24 +121,63 @@ jobs:
             fi
           done
 
-      - name: Create or update GitHub Release (published, with assets)
+      - name: "Create or update GitHub Release (draft -> upload -> publish)"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
           ASSETS=(openrpc.json refs-openrpc.json "docs-snapshot-${TAG}.tar.gz")
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "release $TAG exists; uploading assets with --clobber and ensuring it is published"
-            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "${ASSETS[@]}"
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
-          else
-            echo "creating new published release $TAG"
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "creating draft release $TAG"
             gh release create "$TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --title "$TAG" \
               --verify-tag \
               --generate-notes \
-              --latest \
-              "${ASSETS[@]}"
+              --draft
           fi
+          # Force back to draft so re-runs can't fire a premature `release: published` webhook.
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=true
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "${ASSETS[@]}"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
+
+  publish-spec:
+    runs-on: ubuntu-latest
+    needs: github-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: openrpc-spec
+
+      - name: Verify required spec files
+        run: |
+          set -euo pipefail
+          for f in openrpc.json refs-openrpc.json; do
+            [ -s "$f" ] || { echo "::error::missing or empty $f"; exit 1; }
+          done
+
+      - name: Setup git config
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Push assembled spec branch
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          git checkout -B assembled-spec
+          git add -f openrpc.json refs-openrpc.json
+          if git diff --cached --quiet; then
+            echo "no changes to commit; nothing to publish"
+            exit 0
+          fi
+          git commit -m "release ${TAG}"
+          git push -fu origin assembled-spec
