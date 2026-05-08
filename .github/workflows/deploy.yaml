@@ -53,7 +53,7 @@ jobs:
         with:
           path: build
 
-      - name: Upload openrpc spec
+      - name: Upload open-rpc spec
         uses: actions/upload-artifact@v4
         with:
           name: openrpc-spec
