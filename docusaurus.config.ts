@@ -9,6 +9,9 @@ const allVersions: string[] = existsSync(versionsFile)
   : [];
 const hasVersions = allVersions.length > 0;
 const top10 = allVersions.slice(0, 10);
+const bannerlessVersions = Object.fromEntries(
+  top10.map((version) => [version, {banner: 'none'}]),
+);
 
 const config: Config = {
   title: 'Ethereum Execution APIs',
@@ -47,7 +50,10 @@ const config: Config = {
       routeBasePath: '/',
       sidebarPath: './docs-api/sidebars.ts',
       ...(hasVersions && {
-        versions: { current: { label: 'Next', path: 'next' } },
+        versions: {
+          current: {label: 'Next', path: 'next', banner: 'unreleased'},
+          ...bannerlessVersions,
+        },
         onlyIncludeVersions: ['current', ...top10],
       }),
     }],
@@ -55,8 +61,7 @@ const config: Config = {
       id: 'releases',
       path: 'docs-releases',
       routeBasePath: 'releases',
-      sidebarPath: './docs-releases/sidebars.ts',
-      banner: "unreleased"
+      sidebarPath: './docs-releases/sidebars.ts'
     }],
     ['@docusaurus/plugin-client-redirects', {
       redirects: [{ from: '/api', to: '/' }],
