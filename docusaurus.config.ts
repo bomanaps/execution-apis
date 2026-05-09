@@ -56,6 +56,7 @@ const config: Config = {
       path: 'docs-releases',
       routeBasePath: 'releases',
       sidebarPath: './docs-releases/sidebars.ts',
+      banner: "unreleased"
     }],
     ['@docusaurus/plugin-client-redirects', {
       redirects: [{ from: '/api', to: '/' }],
