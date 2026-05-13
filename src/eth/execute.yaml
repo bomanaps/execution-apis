@@ -1,5 +1,7 @@
 - name: eth_call
   summary: Executes a new message call immediately without creating a transaction on the block chain.
+  tags:
+    - name: execute
   params:
     - name: Transaction
       required: true
@@ -34,6 +36,8 @@
 
 - name: eth_estimateGas
   summary: Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
+  tags:
+    - name: execute
   params:
     - name: Transaction
       required: true
