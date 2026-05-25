@@ -8,7 +8,7 @@ require (
 	github.com/ethereum/go-ethereum v1.17.3-0.20260413114535-ecae519972c0
 	github.com/holiman/uint256 v1.3.2
 	github.com/mattn/go-jsonpointer v0.0.1
-	github.com/open-rpc/meta-schema v0.0.0-20210416041958-626a15d0a618
+	github.com/open-rpc/spec-types/generated/packages/go v0.1.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	golang.org/x/exp v0.0.0-20240112132812-db7319d0e0e3
