@@ -12,6 +12,12 @@ var openrpcSchemaRaw = openrpc.RawOpenrpcDocument
 var openrpcSchema *jsonschema.Schema
 
 const OpenRpcSchemaURL = "https://meta.open-rpc.org/"
+const draft07SchemaURL = "http://json-schema.org/draft-07/schema#"
+
+var externalRefReplacements = map[string]string{
+	"https://meta.json-schema.tools":                                                draft07SchemaURL,
+	"https://meta.json-schema.tools/#/definitions/JSONSchemaObject/properties/$ref": draft07SchemaURL + "/properties/$ref",
+}
 
 func init() {
 	var openrpcSchemaJSON = map[string]any{}
@@ -29,7 +35,7 @@ func init() {
 	// meta-schema package inlined that content; v1_4 refs out instead. Walk the parsed schema and
 	// replace each `{$ref: "<json-schema.tools URL>"}` object with an empty (permissive) schema so
 	// it resolves locally. The OpenRPC document's structural rules still get validated.
-	stripExternalRefs(openrpcSchemaJSON)
+	replaceExternalSchemaRefs(openrpcSchemaJSON)
 
 	compiler := jsonschema.NewCompiler()
 	err = compiler.AddResource(OpenRpcSchemaURL, openrpcSchemaJSON)
@@ -44,21 +50,22 @@ func Validate(schema map[string]any) error {
 	return openrpcSchema.Validate(schema)
 }
 
-func stripExternalRefs(v any) {
+func replaceExternalSchemaRefs(v any) {
 	switch x := v.(type) {
 	case map[string]any:
 		if ref, ok := x["$ref"].(string); ok && strings.Contains(ref, "json-schema.tools") {
-			for k := range x {
-				delete(x, k)
+			if repl, found := externalRefReplacements[ref]; found {
+				x["$ref"] = repl
+			} else {
+				x["$ref"] = draft07SchemaURL // default to draft 07 schema
 			}
-			return
 		}
 		for _, vv := range x {
-			stripExternalRefs(vv)
+			replaceExternalSchemaRefs(vv)
 		}
 	case []any:
 		for _, vv := range x {
-			stripExternalRefs(vv)
+			replaceExternalSchemaRefs(vv)
 		}
 	}
 }
