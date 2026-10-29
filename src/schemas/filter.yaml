@@ -77,21 +77,69 @@ BlockRef:
       title: parent hash
       $ref: '#/components/schemas/hash32'
 
+LogCursor:
+  title: Log cursor
+  description: Position in the log stream, after the log with `logIndex` in the block, or after the whole block if `logIndex` is omitted. After follows the direction of the scan.
+  type: object
+  required:
+    - blockNumber
+    - blockHash
+  additionalProperties: false
+  properties:
+    blockNumber:
+      title: block number
+      $ref: '#/components/schemas/uint'
+    blockHash:
+      title: block hash
+      description: Hash of the block, which lets the server detect that the client's chain was reorganized.
+      $ref: '#/components/schemas/hash32'
+    logIndex:
+      title: log index
+      description: Index within the block of the last log delivered.
+      $ref: '#/components/schemas/uint'
+
+LogsV2Direction:
+  title: Direction
+  type: string
+  enum:
+    - asc
+    - desc
+  description: '`asc`: Oldest log first, `from` is at or below `toBlock`; `desc`: Newest log first, `from` is at or above `toBlock`.'
+
+LogField:
+  title: Log field
+  type: string
+  enum:
+    - address
+    - topics
+    - data
+    - blockTimestamp
+    - transactionHash
+    - transactionIndex
+
 LogsV2Filter:
   title: Logs V2 filter
   type: object
   required:
-    - fromBlockHash
+    - from
   additionalProperties: false
   properties:
-    fromBlockHash:
-      title: from block hash
-      description: Hash of the block to start scanning from, inclusive.
-      $ref: '#/components/schemas/hash32'
+    from:
+      title: from
+      description: Where the scan starts. A block number or tag starts at that block, inclusive. A cursor from a previous page resumes after it, and must be on the canonical chain.
+      oneOf:
+        - title: Start at a block
+          $ref: '#/components/schemas/BlockNumberOrTagForRange'
+        - title: Resume after a cursor
+          $ref: '#/components/schemas/LogCursor'
     toBlock:
       title: to block
-      description: Inclusive upper bound for the scan. Accepts a block number or tag. If omitted, defaults to latest.
+      description: Last block to scan, inclusive. Defaults to latest when ascending, and to the earliest available block when descending. A block past the head ends the page at the head.
       $ref: '#/components/schemas/BlockNumberOrTagForRange'
+    direction:
+      title: direction
+      description: Order of the scan. Defaults to asc.
+      $ref: '#/components/schemas/LogsV2Direction'
     address:
       title: Address(es)
       oneOf:
@@ -104,17 +152,68 @@ LogsV2Filter:
     topics:
       title: Topics
       $ref: '#/components/schemas/FilterTopics'
-    referenceHead:
-      title: reference head
-      description: Recent block hash the client already knows. When provided, the server anchors an EIP-8304 proof to that block's state root and returns it in the proof field.
-      $ref: '#/components/schemas/hash32'
-    limitLatest:
-      title: limit latest
-      description: Maximum number of most recent matching results to return.
+    maxLogs:
+      title: max logs
+      description: Maximum number of logs to return. The server may return fewer.
       $ref: '#/components/schemas/uint'
-    limitOldest:
-      title: limit oldest
-      description: Maximum number of oldest matching results to return.
+    fields:
+      title: fields
+      description: Optional log fields to return. If omitted, all fields are returned.
+      type: array
+      items:
+        $ref: '#/components/schemas/LogField'
+
+LogV2:
+  title: Log V2
+  description: A log with its position, and the optional fields selected by the request. The fields of its block are in the blocks list of the result.
+  type: object
+  required:
+    - blockNumber
+    - logIndex
+  additionalProperties: false
+  properties:
+    blockNumber:
+      title: block number
+      $ref: '#/components/schemas/uint'
+    logIndex:
+      title: log index
+      $ref: '#/components/schemas/uint'
+    address:
+      title: address
+      $ref: '#/components/schemas/address'
+    topics:
+      title: topics
+      type: array
+      items:
+        $ref: '#/components/schemas/bytes32'
+    data:
+      title: data
+      $ref: '#/components/schemas/bytes'
+    transactionHash:
+      title: transaction hash
+      $ref: '#/components/schemas/hash32'
+    transactionIndex:
+      title: transaction index
+      $ref: '#/components/schemas/uint'
+
+LogBlock:
+  title: Log block
+  description: A block that contains logs of the page.
+  type: object
+  required:
+    - number
+    - hash
+  additionalProperties: false
+  properties:
+    number:
+      title: block number
+      $ref: '#/components/schemas/uint'
+    hash:
+      title: block hash
+      $ref: '#/components/schemas/hash32'
+    timestamp:
+      title: block timestamp
+      description: Only returned if blockTimestamp is selected.
       $ref: '#/components/schemas/uint'
 
 LogsV2Result:
@@ -122,29 +221,34 @@ LogsV2Result:
   type: object
   required:
     - logs
-    - cursorBlock
-    - headBlock
+    - blocks
+    - nextCursor
+    - finalizedBlock
   additionalProperties: false
   properties:
     logs:
       title: logs
       type: array
       items:
-        $ref: '#/components/schemas/Log'
-    cursorBlock:
-      title: cursor block
-      description: The last block the server scanned, inclusive. Pass its hash as fromBlockHash in the next request to resume pagination without gaps or overlaps.
-      $ref: '#/components/schemas/BlockRef'
-    headBlock:
-      title: head block
-      description: The canonical head at the time the server executed this query.
-      $ref: '#/components/schemas/BlockRef'
-    proof:
-      title: proof
-      description: EIP-8304 proof anchored to the referenceHead state root. Null until EIP-8304 is deployed.
+        $ref: '#/components/schemas/LogV2'
+    blocks:
+      title: blocks
+      description: Each block that contains logs of the page, once and in the order of the logs.
+      type: array
+      items:
+        $ref: '#/components/schemas/LogBlock'
+    nextCursor:
+      title: next cursor
+      description: Pass as from in the next request, with the same direction, to continue without gaps or overlaps.
+      $ref: '#/components/schemas/LogCursor'
+    finalizedBlock:
+      title: finalized block
+      description: The finalized block when the server executed the query, null if unknown.
       oneOf:
-        - type: 'null'
-        - type: object
+        - title: Unknown
+          type: 'null'
+        - title: Finalized block
+          $ref: '#/components/schemas/BlockRef'
 
 FilterTopics:
   title: Filter Topics

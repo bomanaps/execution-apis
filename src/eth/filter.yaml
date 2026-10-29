@@ -1,37 +1,65 @@
 - name: eth_getLogsV2
-  summary: Returns logs matching the filter, with a block-level cursor for pagination and reorg detection.
+  summary: Returns one page of logs matching the filter, with a log-level cursor for pagination and reorg detection.
   description: >-
-    Returns all logs that match the given filter, scanning forward from `fromBlockHash`
-    up to `toBlock` inclusive. The response always includes a `cursorBlock` identifying
-    the last block scanned and a `headBlock` identifying the canonical head at query time.
+    Returns logs that match the given filter, scanning from `from` up to `toBlock`
+    inclusive. `from` is either a block number or tag, where the scan starts inclusive,
+    or a cursor from a previous page, after which the scan resumes.
 
 
-    To paginate, repeat the request with `fromBlockHash` set to `cursorBlock.hash` until
-    `cursorBlock.number` equals the resolved `toBlock` number.
+    `direction` sets the order of the scan. With `asc`, the default, logs are returned
+    oldest first and `toBlock` defaults to `latest`. With `desc`, logs are returned newest
+    first, `from` must be at or above `toBlock`, and `toBlock` defaults to the earliest
+    available block. For example, the latest 10 logs are
+    `{"from": "latest", "direction": "desc", "maxLogs": "0xa"}`.
 
 
-    To detect a reorg between pages, compare `fromBlockHash` in the new request against
-    `cursorBlock.hash` from the previous response: a mismatch means the chain has been
-    reorganized and the client must re-anchor.
+    The response always includes `nextCursor`. Pass it as `from` to fetch the next page.
+    A cursor with `logIndex` resumes after that log inside its block, so a page may end
+    in the middle of a block. A cursor without `logIndex` resumes after the whole block.
+    "After" follows the direction, so the next request must use the same `direction`.
+    The scan has reached `toBlock` when `nextCursor` has no `logIndex` and its
+    `blockNumber` equals the resolved `toBlock` number. To follow the head in ascending
+    order, keep polling with the last cursor: until a new block arrives the server returns
+    no logs and the same cursor.
 
 
-    To cap results by count rather than block range, set `limitLatest` or `limitOldest`
-    to the maximum number of results wanted. These are mutually exclusive.
+    The server may end a page early because of `maxLogs` or its own limits, and a
+    `toBlock` past the head ends the page at the head. Such limits never cause an error,
+    the cursor resumes the scan instead. Every page makes progress: it contains at least
+    one log, or scans at least one block. To bound the number of blocks per page, set
+    `toBlock` relative to the cursor.
 
 
-    To request an EIP-8304 proof, set `referenceHead` to a recent block hash the client
-    already knows. The server anchors the proof to that block's state root and returns it
-    in the `proof` field. The `proof` field is `null` until EIP-8304 is deployed.
+    The server checks that a cursor is on its canonical chain and otherwise fails with
+    code `-32001`, returning the canonical block at the cursor's height so the client can
+    find the fork point. If the chain reorganizes while the server scans, the request
+    fails with code `-32000` and can be retried.
+
+
+    By default every log field is returned. `fields` selects the optional fields, the
+    position of a log (`blockNumber`, `logIndex`) is always returned. Leaving out
+    `transactionHash` lets the server skip reading the transaction.
+
+
+    Block fields are not repeated on every log. `blocks` lists each block that contains
+    a log of the page once, in the order of the logs, with its hash and, if
+    `blockTimestamp` is selected, its timestamp. Since a page is guaranteed to come from
+    a single chain, a log's `blockNumber` identifies its entry in `blocks`. A block split
+    across pages is listed on each of them.
   params:
     - name: Filter
       schema:
         $ref: '#/components/schemas/LogsV2Filter'
       required: true
   errors:
+    - code: -32000
+      message: Chain reorganized during query, retry
     - code: -32001
-      message: fromBlockHash not on canonical chain
-    - code: -32005
-      message: Scan limit exceeded
+      message: Cursor block not on canonical chain
+    - code: -32602
+      message: Invalid block range
+    - code: 4444
+      message: Pruned history unavailable
   result:
     name: Logs V2 result
     schema:
@@ -41,33 +69,31 @@
       params:
         - name: Filter
           value:
-            fromBlockHash: '0xfc139f5e2edee9e9c888d8df9a2d2226133a9bd87c88ccbd9c930d3d4c9f9ef5'
+            from: '0x233'
             toBlock: '0x238'
             address: '0x42699a7612a82f1d9c36148af9c77354759b210b'
             topics: []
+            maxLogs: '0x1'
+            fields:
+              - topics
+              - data
       result:
         name: Logs V2 result
         value:
           logs:
-            - logIndex: '0x0'
-              removed: false
-              blockNumber: '0x233'
-              blockTimestamp: '0x11'
-              blockHash: '0xfc139f5e2edee9e9c888d8df9a2d2226133a9bd87c88ccbd9c930d3d4c9f9ef5'
-              transactionHash: '0x66e7a140c8fa27fe98fde923defea7562c3ca2d6bb89798aabec65782c08f63d'
-              transactionIndex: '0x0'
-              address: '0x42699a7612a82f1d9c36148af9c77354759b210b'
+            - blockNumber: '0x233'
+              logIndex: '0x0'
               data: '0x0000000000000000000000000000000000000000000000000000000000000004'
               topics:
                 - '0x04474795f5b996ff80cb47c148d4c5ccdbe09ef27551820caa9c2f8ed149cce3'
-          cursorBlock:
-            number: '0x238'
-            hash: '0x98b0ec0f9fea0018a644959accbe69cd046a8582e89402e1ab0ada91cad644ed'
-            parentHash: '0xfc139f5e2edee9e9c888d8df9a2d2226133a9bd87c88ccbd9c930d3d4c9f9ef5'
-          headBlock:
-            number: '0x238'
-            hash: '0x98b0ec0f9fea0018a644959accbe69cd046a8582e89402e1ab0ada91cad644ed'
-            parentHash: '0xfc139f5e2edee9e9c888d8df9a2d2226133a9bd87c88ccbd9c930d3d4c9f9ef5'
+          blocks:
+            - number: '0x233'
+              hash: '0xfc139f5e2edee9e9c888d8df9a2d2226133a9bd87c88ccbd9c930d3d4c9f9ef5'
+          nextCursor:
+            blockNumber: '0x233'
+            blockHash: '0xfc139f5e2edee9e9c888d8df9a2d2226133a9bd87c88ccbd9c930d3d4c9f9ef5'
+            logIndex: '0x0'
+          finalizedBlock: null
 
 - name: eth_newFilter
   summary: Install a log filter in the server, allowing for later polling. Registers client interest in logs matching the filter, and returns an identifier.
